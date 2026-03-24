@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="net.czming.violation.disposition.mapper.UserMapper">
+
+    <select id="selectUserById" resultType="net.czming.model.violation.disposition.entity.User">
+        select *
+        from user
+        where id = #{id}
+    </select>
+
+    <select id="selectUserByUsername" resultType="net.czming.model.violation.disposition.entity.User">
+        select *
+        from user
+        where username = #{username}
+    </select>
+
+
+    <select id="selectUserByPhoneNumber" resultType="net.czming.model.violation.disposition.entity.User">
+        select *
+        from user
+        where phone_number = #{phoneNumber}
+    </select>
+
+    <select id="selectUserByIdCard" resultType="net.czming.model.violation.disposition.entity.User">
+        select *
+        from user
+        where id_card = #{idCard}
+    </select>
+
+    <select id="selectRandomAuditorUsername" resultType="java.lang.String">
+        select username
+        from user
+        where role = 'AUDITOR' ORDER BY RAND() LIMIT 1
+    </select>
+
+    <update id="updateUser">
+        update user
+        <set>
+            id = id,
+            username = username,
+            <if test="password != null">
+                password = #{password},
+            </if>
+            <if test="realName != null">
+                real_name = #{realName},
+            </if>
+            <if test="idCard != null">
+                id_card = #{idCard},
+            </if>
+            <if test="phoneNumber != null">
+                phone_number = #{phoneNumber},
+            </if>
+            <if test="role != null">
+                role = #{role},
+            </if>
+            <if test="status != null">
+                status = #{status}
+            </if>
+        </set>
+        <where>
+            <choose>
+                <when test="id != null">
+                    id = #{id}
+                </when>
+                <when test="username != null">
+                    username = #{username}
+                </when>
+                <when test="phoneNumber != null">
+                    phone_number = #{phoneNumber}
+                </when>
+                <otherwise>
+                    1 = 0
+                </otherwise>
+            </choose>
+        </where>
+    </update>
+
+    <insert id="insertUser" useGeneratedKeys="true" keyProperty="id">
+        insert into user(username, password, real_name, id_card, phone_number, role, status)
+            value (#{username}, #{password}, #{realName}, #{idCard},
+                   #{phoneNumber}, #{role}, #{status})
+    </insert>
+
+
+</mapper>

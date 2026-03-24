@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="net.czming.detection.review.mapper.CameraMapper">
+
+    <select id="selectByCameraId" resultType="net.czming.model.detection.review.entity.Camera">
+        select * from camera where id = #{id}
+    </select>
+
+    <select id="selectAll" resultType="net.czming.model.detection.review.entity.Camera">
+        select * from camera
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        insert into camera(location, secret_key)
+        VALUES (#{location}, #{secretKey})
+    </insert>
+
+    <delete id="deleteById">
+        delete from camera where id = #{id}
+    </delete>
+
+</mapper>

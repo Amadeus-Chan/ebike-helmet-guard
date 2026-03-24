@@ -1,0 +1,5 @@
+# Project exclude paths
+/common/target/
+/gateway/target/
+/services/detection-review/target/
+/services/violation-disposition/target/

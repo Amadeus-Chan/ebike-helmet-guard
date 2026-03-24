@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="net.czming.violation.disposition.mapper.ViolationMapper">
+
+    <select id="selectViolationsByLicensePlate" resultType="net.czming.model.violation.disposition.entity.Violation" >
+        select *
+        from violation
+        where license_plate = #{licensePlate}
+    </select>
+
+    <select id="selectViolationById" resultType="net.czming.model.violation.disposition.entity.Violation">
+        select *
+        from violation
+        where id = #{id}
+    </select>
+
+
+    <update id="updateViolation">
+        update violation
+        <set>
+            id = id,
+            license_plate = license_plate,
+            <if test="location != null">
+                location = #{location},
+            </if>
+            <if test="evidenceImage != null">
+                evidence_image = #{evidenceImage},
+            </if>
+            <if test="time != null">
+                time = #{time},
+            </if>
+            <if test="status != null">
+                status = #{status}
+            </if>
+        </set>
+        <where>
+            <choose>
+                <when test="id != null">
+                    id = #{id}
+                </when>
+                <otherwise>
+                    1 = 0
+                </otherwise>
+            </choose>
+        </where>
+    </update>
+
+    <insert id="insertViolation" useGeneratedKeys="true" keyProperty="id">
+        insert into violation(license_plate, location, evidence_image, time, status)
+            VALUES (#{licensePlate}, #{location}, #{evidenceImage},
+                   #{time}, #{status})
+    </insert>
+
+    <insert id="batchInsertViolation" useGeneratedKeys="true" keyProperty="id" >
+        insert into violation(license_plate, location, evidence_image, time, status)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.licensePlate}, #{item.location}, #{item.evidenceImage}, #{item.time}, #{item.status})
+        </foreach>
+    </insert>
+</mapper>

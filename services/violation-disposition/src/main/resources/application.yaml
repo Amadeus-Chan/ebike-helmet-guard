@@ -1,0 +1,58 @@
+server:
+  port: 8000
+
+spring:
+  application:
+    name: violation-disposition
+  datasource:
+    url: jdbc:mysql://localhost:3306/violation_disposition
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  data:
+    redis:
+      host: 192.168.117.130
+      port: 6379
+      password: 020508
+      lettuce:
+        pool:
+          max-active: 8
+          min-idle: 0
+          max-idle: 8
+          max-wait: 100
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: public
+        group: ${spring.application.name}
+  rabbitmq:
+    host: localhost
+    port: 5672
+    virtual-host: /ebike-helmet-guard
+    username: czming
+    password: 020508
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 100MB
+  config:
+    import:
+      - nacos:internal-auth.yaml
+      - nacos:app-code.yaml
+      - nacos:access-key.yaml
+
+
+mybatis:
+  mapper-locations: classpath:mapper/**.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    net.czming.violation.disposition.mapper: debug
+
+
+
+    

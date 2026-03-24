@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="net.czming.violation.disposition.mapper.EbikeMapper">
+
+    <select id="selectEbikeByLicensePlate" resultType="net.czming.model.violation.disposition.entity.Ebike">
+        select * from ebike where license_plate = #{licensePlate}
+    </select>
+
+    <select id="selectEbikeByOwnerIdCard" resultType="net.czming.model.violation.disposition.entity.Ebike">
+        select * from ebike where owner_id_card = #{ownerIdCard}
+    </select>
+
+    <update id="updateEbike">
+        update ebike
+        <set>
+            id = id,
+            license_plate = license_plate,
+            <if test="featureDescription != null">
+                feature_description = #{featureDescription},
+            </if>
+            <if test="ownerName != null">
+                owner_name = #{ownerName},
+            </if>
+            <if test="ownerIdCard != null">
+                owner_id_card = #{ownerIdCard},
+            </if>
+            <if test="ownerPhoneNumber != null">
+                owner_phone_number = #{ownerPhoneNumber}
+            </if>
+        </set>
+        <where>
+            <choose>
+                <when test="id != null">
+                    id = #{id}
+                </when>
+                <when test="licensePlate != null">
+                    license_plate = #{licensePlate}
+                </when>
+                <otherwise>
+                    1 = 0
+                </otherwise>
+            </choose>
+        </where>
+    </update>
+
+    <insert id="insertEbike" useGeneratedKeys="true" keyProperty="id">
+        insert into ebike (license_plate, feature_description, owner_name, owner_id_card, owner_phone_number)
+        VALUES (#{licensePlate}, #{featureDescription}, #{ownerName}, #{ownerIdCard}, #{ownerPhoneNumber})
+    </insert>
+
+    <insert id="batchInsertEbike" useGeneratedKeys="true" keyProperty="id">
+        insert into ebike (license_plate, feature_description, owner_name, owner_id_card, owner_phone_number)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.licensePlate}, #{item.featureDescription}, #{item.ownerName}, #{item.ownerIdCard}, #{item.ownerPhoneNumber})
+        </foreach>
+    </insert>
+
+    <delete id="deleteEbikeByLicensePlate">
+        delete from ebike where license_plate = #{licensePlate}
+    </delete>
+</mapper>

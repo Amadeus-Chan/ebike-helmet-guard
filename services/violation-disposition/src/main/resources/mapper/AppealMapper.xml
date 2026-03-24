@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="net.czming.violation.disposition.mapper.AppealMapper">
+
+
+    
+    <sql id="selectSql">
+        select appeal.*,
+               violation.license_plate  as violation_license_plate,
+               violation.location       as violation_location,
+               violation.evidence_image as violation_evidence_image,
+               violation.time           as violation_time,
+               violation.status         as violation_status
+        from appeal
+                 left join violation on appeal.violation_id = violation.id
+    </sql>
+
+
+    <resultMap id="AppealRM" type="net.czming.model.violation.disposition.entity.Appeal">
+        <id column="id" property="id"/>
+        <result column="violation_id" property="violationId"/>
+        <result column="create_time" property="createTime"/>
+        <result column="auditor_username" property="auditorUsername"/>
+        <result column="status" property="status"/>
+        <result column="process_time" property="processTime"/>
+
+        <association property="violation" javaType="net.czming.model.violation.disposition.entity.Violation">
+            <id column="violation_id" property="id"/>
+            <result column="violation_license_plate" property="licensePlate"/>
+            <result column="violation_location" property="location"/>
+            <result column="violation_evidence_image" property="evidenceImage"/>
+            <result column="violation_time" property="time"/>
+            <result column="violation_status" property="status"/>
+        </association>
+    </resultMap>
+
+    <select id="selectAppealById" resultMap="AppealRM">
+        <include refid="selectSql"/>
+        where appeal.id = #{id}
+    </select>
+
+    <select id="selectAppealByViolationId" resultType="net.czming.model.violation.disposition.entity.Appeal">
+        <include refid="selectSql"/>
+        where appeal.violation_id = #{violationId}
+    </select>
+
+    <select id="selectAppealByAuditorUsername" resultMap="AppealRM">
+        <include refid="selectSql"/>
+        where auditor_username = #{auditorUsername}
+        order by create_time DESC
+    </select>
+
+
+    <select id="selectProcessingAppealByAuditorUsername"
+            resultMap="AppealRM">
+        <include refid="selectSql"/>
+        where auditor_username = #{auditorUsername}
+        and appeal.status = 'PROCESSING'
+        order by create_time DESC
+    </select>
+
+    <update id="updateAppeal">
+        update appeal
+        <set>
+            id = #{id},
+            violation_id = #{violationId},
+            create_time = #{createTime},
+            <if test="auditorUsername != null">
+                auditor_username = #{auditorUsername},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="processTime != null">
+                process_time = #{processTime}
+            </if>
+        </set>
+        where id = #{id}
+    </update>
+
+    <insert id="insertAppeal" useGeneratedKeys="true" keyProperty="id">
+        insert into appeal(violation_id, create_time, auditor_username, status, process_time)
+        VALUES (#{violationId}, #{createTime}, #{auditorUsername}, #{status}, #{processTime})
+    </insert>
+
+</mapper>
