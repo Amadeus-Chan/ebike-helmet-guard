@@ -25,6 +25,9 @@ spring:
     virtual-host: /ebike-helmet-guard
     username: czming
     password: 020508
+    listener:
+      simple:
+        prefetch: 1
   cloud:
     nacos:
       config:
@@ -43,6 +46,7 @@ spring:
     import:
       - nacos:internal-auth.yaml
       - nacos:file-store.yaml
+      - nacos:model-path.yaml
 
 mybatis:
   mapper-locations: classpath:mapper/**.xml

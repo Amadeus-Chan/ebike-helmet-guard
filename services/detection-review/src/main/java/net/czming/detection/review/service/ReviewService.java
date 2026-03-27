@@ -8,30 +8,35 @@ import cn.smartjavaai.objectdetection.model.DetectorModel;
 import cn.smartjavaai.ocr.config.OcrRecOptions;
 import cn.smartjavaai.ocr.entity.OcrInfo;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
+import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
+import net.czming.common.annotation.Loggable;
 import net.czming.common.exception.AccessDeniedException;
 import net.czming.common.exception.BusinessException;
 import net.czming.common.exception.ErrorEnum;
+import net.czming.common.util.constants.RabbitMQConstants;
 import net.czming.common.util.constants.RedisConstants;
 import net.czming.detection.review.feign.ViolationDispositionFeignClient;
+import net.czming.detection.review.mq.message.ReviewTask;
 import net.czming.detection.review.properties.PathProperties;
+import net.czming.detection.review.service.DetectionAssociationService.RiderMatch;
 import net.czming.model.detection.review.entity.ReviewRecord;
 import net.czming.model.detection.review.entity.ViolationResult;
 import net.czming.model.violation.disposition.dto.ViolationAddDto;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import net.czming.detection.review.service.DetectionAssociationService.RiderMatch;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
 
 @Slf4j
 @Service
@@ -53,7 +58,10 @@ public class ReviewService {
 
     private final StringRedisTemplate stringRedisTemplate;
 
+    private final RabbitTemplate rabbitTemplate;
+
     private final PathProperties pathProperties;
+
 
     public ReviewService(final DetectorModel detectorModel,
                          final OcrCommonRecModel ocrCommonRecModel,
@@ -63,6 +71,7 @@ public class ReviewService {
                          final DetectionAssociationService detectionAssociationService,
                          final ViolationDispositionFeignClient violationDispositionFeignClient,
                          final StringRedisTemplate stringRedisTemplate,
+                         final RabbitTemplate rabbitTemplate,
                          final PathProperties pathProperties) {
         this.detectorModel = detectorModel;
         this.ocrCommonRecModel = ocrCommonRecModel;
@@ -72,10 +81,11 @@ public class ReviewService {
         this.detectionAssociationService = detectionAssociationService;
         this.violationDispositionFeignClient = violationDispositionFeignClient;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.rabbitTemplate = rabbitTemplate;
         this.pathProperties = pathProperties;
     }
 
-    public void review(Long cameraId, String secretKey, MultipartFile detectedImageFile, LocalDateTime captureTime) {
+    public void submitReviewTask(Long cameraId, String secretKey, MultipartFile detectedImageFile, LocalDateTime captureTime){
 
         String redisKey = RedisConstants.CAMERA_SECRET_KEY + cameraId;
         String cachedSecretKey = stringRedisTemplate.opsForValue().get(redisKey);
@@ -94,34 +104,61 @@ public class ReviewService {
 
         String location = cameraService.getCameraLocation(cameraId);
 
-        LocalDateTime reviewTime = LocalDateTime.now();
-
         String imageFileName = UUID.randomUUID() + ".jpg";
-        String fullPath = pathProperties.getDetectedImageDir() + File.separator + imageFileName;
 
+
+        File dir = new File(pathProperties.getDetectedImageDir());
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "detectedImage目录创建失败");
+        }
+
+        String fullPath = pathProperties.getDetectedImageDir() + File.separator + imageFileName;
+        File file = new File(fullPath);
 
         try {
 
-            File file = new File(fullPath);
-
             detectedImageFile.transferTo(file);
 
-            Image image = SmartImageFactory.getInstance().fromFile(file);
+            String detectedImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + imageFileName;
+            ReviewTask reviewTask = ReviewTask.builder()
+                    .cameraId(cameraId)
+                    .detectedImageUrl(detectedImageUrl)
+                    .captureTime(captureTime)
+                    .location(location)
+                    .build();
+
+            rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask);
+        } catch (Exception e) {
+            if (file.exists() && !file.delete()) {
+                log.error("文件删除失败路径：{}" ,fullPath);
+            }
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务提交失败");
+        }
+
+    }
+
+
+    @Loggable
+    @Transactional
+    public void review(ReviewTask reviewTask) {
+        try {
+
+            Image image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImageUrl());
 
             ReviewRecord reviewRecord = ReviewRecord.builder()
-                    .cameraId(cameraId)
-                    .detectedImage(fullPath)
-                    .reviewTime(reviewTime)
-                    .captureTime(captureTime)
+                    .cameraId(reviewTask.getCameraId())
+                    .detectedImage(reviewTask.getDetectedImageUrl())
+                    .reviewTime(LocalDateTime.now())
+                    .captureTime(reviewTask.getCaptureTime())
                     .violated(false)
                     .build();
 
 
             List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
 
-            ArrayList<DetectionInfo> motorcyclistList = new ArrayList<>();
-            ArrayList<DetectionInfo> helmetList = new ArrayList<>();
-            ArrayList<DetectionInfo> licensePlateList = new ArrayList<>();
+            List<DetectionInfo> motorcyclistList = new ArrayList<>();
+            List<DetectionInfo> helmetList = new ArrayList<>();
+            List<DetectionInfo> licensePlateList = new ArrayList<>();
 
             detectionInfoList.forEach(detectionInfo -> {
                 String type = detectionInfo.getObjectDetInfo().getClassName();
@@ -131,6 +168,7 @@ public class ReviewService {
                     case "license_plate" -> licensePlateList.add(detectionInfo);
                 }
             });
+
 
             List<RiderMatch> riderMatchList =
                     detectionAssociationService.associate(
@@ -149,12 +187,14 @@ public class ReviewService {
                 boolean hasLicensePlate = riderMatch.getLicensePlate() != null;
                 if (!hasHelmet && hasLicensePlate) {
                     String recognizeLicensePlate = recognizeLicensePlate(image, riderMatch);
+                    if (!StringUtils.hasText(recognizeLicensePlate))
+                        return;
 
                     ViolationResult violationResult = ViolationResult.builder()
                             .recordId(reviewRecord.getId())
-                            .evidenceImage(fullPath)
-                            .location(location)
-                            .violationTime(captureTime)
+                            .evidenceImage(reviewTask.getDetectedImageUrl())
+                            .location(reviewTask.getLocation())
+                            .violationTime(reviewTask.getCaptureTime())
                             .licensePlate(recognizeLicensePlate)
                             .build();
 
@@ -163,7 +203,7 @@ public class ReviewService {
             });
 
 
-            if (violationResultList.isEmpty()){
+            if (violationResultList.isEmpty()) {
                 log.info("没有违规被检测到");
                 return;
             }
@@ -176,7 +216,8 @@ public class ReviewService {
             submitViolations(violationResultList);
             violationResultService.batchAdd(violationResultList);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
+            log.error("复核任务处理失败，reviewTask={}", reviewTask, e);
             throw new BusinessException(ErrorEnum.BIZ_FAILED, e.getMessage());
         }
     }
@@ -184,15 +225,10 @@ public class ReviewService {
     private void submitViolations(List<ViolationResult> violationResultList) {
         List<ViolationAddDto> violationAddDtoList = violationResultList.stream().map(
                 violationResult -> {
-
-                    String path = violationResult.getEvidenceImage();
-                    String fileName = Paths.get(path).getFileName().toString();
-                    String evidenceImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + fileName;
-
                     ViolationAddDto violationDto = new ViolationAddDto();
                     violationDto.setLicensePlate(violationResult.getLicensePlate());
                     violationDto.setLocation(violationResult.getLocation());
-                    violationDto.setEvidenceImage(evidenceImageUrl);
+                    violationDto.setEvidenceImage(violationResult.getEvidenceImage());
                     violationDto.setTime(violationResult.getViolationTime());
                     return violationDto;
                 }

@@ -28,7 +28,7 @@ public class ReviewController {
                           @RequestParam("secretKey") String secretKey,
                           @RequestParam("detectedImage") MultipartFile detectedImage,
                           @RequestParam("captureTime") LocalDateTime captureTime) {
-        reviewService.review(cameraId, secretKey, detectedImage, captureTime);
+        reviewService.submitReviewTask(cameraId, secretKey, detectedImage, captureTime);
         return R.ok();
     }
 }
