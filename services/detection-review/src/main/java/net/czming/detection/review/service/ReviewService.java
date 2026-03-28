@@ -8,7 +8,6 @@ import cn.smartjavaai.objectdetection.model.DetectorModel;
 import cn.smartjavaai.ocr.config.OcrRecOptions;
 import cn.smartjavaai.ocr.entity.OcrInfo;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
-import lombok.extern.java.Log;
 import lombok.extern.slf4j.Slf4j;
 import net.czming.common.annotation.Loggable;
 import net.czming.common.exception.AccessDeniedException;
@@ -17,10 +16,10 @@ import net.czming.common.exception.ErrorEnum;
 import net.czming.common.util.constants.RabbitMQConstants;
 import net.czming.common.util.constants.RedisConstants;
 import net.czming.detection.review.feign.ViolationDispositionFeignClient;
-import net.czming.detection.review.mq.message.ReviewTask;
 import net.czming.detection.review.properties.PathProperties;
 import net.czming.detection.review.service.DetectionAssociationService.RiderMatch;
-import net.czming.model.detection.review.entity.ReviewRecord;
+import net.czming.model.detection.review.entity.Camera;
+import net.czming.model.detection.review.entity.ReviewTask;
 import net.czming.model.detection.review.entity.ViolationResult;
 import net.czming.model.violation.disposition.dto.ViolationAddDto;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -31,6 +30,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -85,24 +85,27 @@ public class ReviewService {
         this.pathProperties = pathProperties;
     }
 
-    public void submitReviewTask(Long cameraId, String secretKey, MultipartFile detectedImageFile, LocalDateTime captureTime){
+    public void submitReviewTask(Long cameraId, String secretKey, MultipartFile detectedImageFile, LocalDateTime captureTime) {
 
         String redisKey = RedisConstants.CAMERA_SECRET_KEY + cameraId;
         String cachedSecretKey = stringRedisTemplate.opsForValue().get(redisKey);
+
+        Camera camera = cameraService.getCameraById(cameraId);
+
 
         if (StringUtils.hasText(cachedSecretKey)) {
             if (!cachedSecretKey.equals(secretKey))
                 throw new AccessDeniedException();
             stringRedisTemplate.expire(redisKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
         } else {
-            String dbSecretKey = cameraService.getSecretKey(cameraId);
+            String dbSecretKey = camera.getSecretKey();
             if (!secretKey.equals(dbSecretKey)) {
                 throw new AccessDeniedException();
             }
             stringRedisTemplate.opsForValue().set(redisKey, secretKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
         }
 
-        String location = cameraService.getCameraLocation(cameraId);
+        String location = camera.getLocation();
 
         String imageFileName = UUID.randomUUID() + ".jpg";
 
@@ -121,38 +124,42 @@ public class ReviewService {
 
             String detectedImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + imageFileName;
             ReviewTask reviewTask = ReviewTask.builder()
+                    .id(null)
                     .cameraId(cameraId)
-                    .detectedImageUrl(detectedImageUrl)
-                    .captureTime(captureTime)
+                    .detectedImage(detectedImageUrl)
                     .location(location)
+                    .captureTime(captureTime)
+                    .reviewTime(null)
+                    .violated(false)
+                    .status(ReviewTask.Status.PENDING)
                     .build();
 
-            rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask);
-        } catch (Exception e) {
-            if (file.exists() && !file.delete()) {
-                log.error("文件删除失败路径：{}" ,fullPath);
-            }
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务提交失败");
-        }
+            reviewRecordService.addReviewRecord(reviewTask);
+            if (reviewTask.getId() != null)
+                rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask.getId());
 
+        } catch (IOException e) {
+            if (file.exists() && !file.delete()) {
+                log.error("文件删除失败路径：{}", fullPath);
+            }
+
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "图片转存失败");
+        }
     }
 
 
     @Loggable
     @Transactional
-    public void review(ReviewTask reviewTask) {
+    public void review(Long reviewRecordId) {
         try {
 
-            Image image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImageUrl());
+            ReviewTask reviewTask = reviewRecordService.getReviewRecordById(reviewRecordId);
 
-            ReviewRecord reviewRecord = ReviewRecord.builder()
-                    .cameraId(reviewTask.getCameraId())
-                    .detectedImage(reviewTask.getDetectedImageUrl())
-                    .reviewTime(LocalDateTime.now())
-                    .captureTime(reviewTask.getCaptureTime())
-                    .violated(false)
-                    .build();
 
+            if (reviewTask.getStatus() != ReviewTask.Status.PENDING)
+                return;
+
+            Image image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImage());
 
             List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
 
@@ -179,7 +186,6 @@ public class ReviewService {
                             image.getHeight()
                     );
 
-            reviewRecordService.addReviewRecord(reviewRecord);
 
             List<ViolationResult> violationResultList = new ArrayList<>();
             riderMatchList.forEach(riderMatch -> {
@@ -187,12 +193,13 @@ public class ReviewService {
                 boolean hasLicensePlate = riderMatch.getLicensePlate() != null;
                 if (!hasHelmet && hasLicensePlate) {
                     String recognizeLicensePlate = recognizeLicensePlate(image, riderMatch);
+
                     if (!StringUtils.hasText(recognizeLicensePlate))
                         return;
 
                     ViolationResult violationResult = ViolationResult.builder()
-                            .recordId(reviewRecord.getId())
-                            .evidenceImage(reviewTask.getDetectedImageUrl())
+                            .recordId(reviewTask.getId())
+                            .evidenceImage(reviewTask.getDetectedImage())
                             .location(reviewTask.getLocation())
                             .violationTime(reviewTask.getCaptureTime())
                             .licensePlate(recognizeLicensePlate)
@@ -205,19 +212,24 @@ public class ReviewService {
 
             if (violationResultList.isEmpty()) {
                 log.info("没有违规被检测到");
+                reviewTask.setReviewTime(LocalDateTime.now());
+                reviewTask.setStatus(ReviewTask.Status.PROCESSED);
+                reviewRecordService.updateReviewRecord(reviewTask);
                 return;
             }
 
             log.info("检测到违规:{}", violationResultList);
 
-
-            reviewRecordService.updateReviewRecordViolate(reviewRecord.getId(), true);
+            reviewTask.setReviewTime(LocalDateTime.now());
+            reviewTask.setViolated(true);
+            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
+            reviewRecordService.updateReviewRecord(reviewTask);
 
             submitViolations(violationResultList);
             violationResultService.batchAdd(violationResultList);
 
-        } catch (Exception e) {
-            log.error("复核任务处理失败，reviewTask={}", reviewTask, e);
+        } catch (IOException e) {
+            log.error("复核任务处理失败，reviewRecordId={}", reviewRecordId, e);
             throw new BusinessException(ErrorEnum.BIZ_FAILED, e.getMessage());
         }
     }

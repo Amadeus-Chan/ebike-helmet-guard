@@ -26,7 +26,7 @@ public class ReviewTaskListener {
             exchange = @Exchange(name = RabbitMQConstants.REVIEW_TASK_EXCHANGE),
             key = RabbitMQConstants.REVIEW_TASK_ROUTING_KEY
     ))
-    public void listen(ReviewTask reviewTask) {
-        reviewService.review(reviewTask);
+    public void listen(Long id) {
+        reviewService.review(id);
     }
 }

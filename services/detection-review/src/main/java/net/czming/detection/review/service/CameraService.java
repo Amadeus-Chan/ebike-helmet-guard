@@ -42,19 +42,12 @@ public class CameraService {
         cameraMapper.deleteById(id);
     }
 
-    public String getCameraLocation(Long cameraId) {
+
+    public Camera getCameraById(Long cameraId) {
         Camera camera = cameraMapper.selectByCameraId(cameraId);
         if (camera == null)
             throw new BusinessException(ErrorEnum.BIZ_FAILED, "目标摄像头不存在");
 
-        return camera.getLocation();
+        return camera;
     }
-
-    public String getSecretKey(Long cameraId) {
-        Camera camera = cameraMapper.selectByCameraId(cameraId);
-        if (camera == null)
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "目标摄像头不存在");
-
-        return camera.getSecretKey();
-}
 }

@@ -11,11 +11,18 @@ import java.time.LocalDateTime;
 @Builder
 @AllArgsConstructor
 @NoArgsConstructor
-public class ReviewRecord {
+public class ReviewTask {
     private Long id;
     private Long cameraId;
     private String detectedImage;
-    private boolean violated;
-    private LocalDateTime reviewTime;
+    private String location;
     private LocalDateTime captureTime;
+    private LocalDateTime reviewTime;
+    private boolean violated;
+    private Status status;
+
+     public enum Status {
+        PENDING,
+        PROCESSED
+    }
 }

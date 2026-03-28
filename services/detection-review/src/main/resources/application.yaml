@@ -28,6 +28,16 @@ spring:
     listener:
       simple:
         prefetch: 1
+        retry:
+          enabled: true
+        acknowledge-mode: auto
+    connection-timeout: 200ms
+    template:
+      retry:
+        enabled: true
+        initial-interval: 1000ms
+        multiplier: 1
+        max-attempts: 2
   cloud:
     nacos:
       config:
