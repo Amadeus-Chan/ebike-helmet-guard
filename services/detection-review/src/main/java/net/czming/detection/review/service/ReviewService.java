@@ -8,6 +8,7 @@ import cn.smartjavaai.objectdetection.model.DetectorModel;
 import cn.smartjavaai.ocr.config.OcrRecOptions;
 import cn.smartjavaai.ocr.entity.OcrInfo;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.czming.common.annotation.Loggable;
 import net.czming.common.exception.AccessDeniedException;
@@ -38,6 +39,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 
+@RequiredArgsConstructor
 @Slf4j
 @Service
 public class ReviewService {
@@ -48,7 +50,7 @@ public class ReviewService {
 
     private final CameraService cameraService;
 
-    private final ReviewRecordService reviewRecordService;
+    private final ReviewTaskService reviewTaskService;
 
     private final ViolationResultService violationResultService;
 
@@ -62,89 +64,49 @@ public class ReviewService {
 
     private final PathProperties pathProperties;
 
-
-    public ReviewService(final DetectorModel detectorModel,
-                         final OcrCommonRecModel ocrCommonRecModel,
-                         final CameraService cameraService,
-                         final ReviewRecordService reviewRecordService,
-                         final ViolationResultService violationResultService,
-                         final DetectionAssociationService detectionAssociationService,
-                         final ViolationDispositionFeignClient violationDispositionFeignClient,
-                         final StringRedisTemplate stringRedisTemplate,
-                         final RabbitTemplate rabbitTemplate,
-                         final PathProperties pathProperties) {
-        this.detectorModel = detectorModel;
-        this.ocrCommonRecModel = ocrCommonRecModel;
-        this.cameraService = cameraService;
-        this.reviewRecordService = reviewRecordService;
-        this.violationResultService = violationResultService;
-        this.detectionAssociationService = detectionAssociationService;
-        this.violationDispositionFeignClient = violationDispositionFeignClient;
-        this.stringRedisTemplate = stringRedisTemplate;
-        this.rabbitTemplate = rabbitTemplate;
-        this.pathProperties = pathProperties;
+    public void dispatchPendingTasks() {
+        for (ReviewTask reviewTask : reviewTaskService.getPendingReviewTask()) {
+            rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask.getId());
+        }
     }
+
 
     public void submitReviewTask(Long cameraId, String secretKey, MultipartFile detectedImageFile, LocalDateTime captureTime) {
 
-        String redisKey = RedisConstants.CAMERA_SECRET_KEY + cameraId;
-        String cachedSecretKey = stringRedisTemplate.opsForValue().get(redisKey);
-
-        Camera camera = cameraService.getCameraById(cameraId);
-
-
-        if (StringUtils.hasText(cachedSecretKey)) {
-            if (!cachedSecretKey.equals(secretKey))
-                throw new AccessDeniedException();
-            stringRedisTemplate.expire(redisKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
-        } else {
-            String dbSecretKey = camera.getSecretKey();
-            if (!secretKey.equals(dbSecretKey)) {
-                throw new AccessDeniedException();
-            }
-            stringRedisTemplate.opsForValue().set(redisKey, secretKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
-        }
-
-        String location = camera.getLocation();
-
-        String imageFileName = UUID.randomUUID() + ".jpg";
-
+        Camera camera = validateCameraSecretKey(cameraId, secretKey);
 
         File dir = new File(pathProperties.getDetectedImageDir());
         if (!dir.exists() && !dir.mkdirs()) {
             throw new BusinessException(ErrorEnum.BIZ_FAILED, "detectedImage目录创建失败");
         }
 
-        String fullPath = pathProperties.getDetectedImageDir() + File.separator + imageFileName;
-        File file = new File(fullPath);
+        String imageFileName = UUID.randomUUID() + ".jpg";
+        String detectedImagePath = pathProperties.getDetectedImageDir() + File.separator + imageFileName;
+        String detectedImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + imageFileName;
+
+        File file = new File(detectedImagePath);
+
+        ReviewTask reviewTask = ReviewTask.builder()
+                .cameraId(cameraId)
+                .detectedImage(detectedImageUrl)
+                .location(camera.getLocation())
+                .captureTime(captureTime)
+                .violated(false)
+                .status(ReviewTask.Status.PENDING)
+                .build();
 
         try {
-
             detectedImageFile.transferTo(file);
+            reviewTaskService.addReviewTask(reviewTask);
+        } catch (Exception e) {
+            if (file.exists() && !file.delete())
+                log.error("文件删除失败，路径：{}", detectedImagePath);
 
-            String detectedImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + imageFileName;
-            ReviewTask reviewTask = ReviewTask.builder()
-                    .id(null)
-                    .cameraId(cameraId)
-                    .detectedImage(detectedImageUrl)
-                    .location(location)
-                    .captureTime(captureTime)
-                    .reviewTime(null)
-                    .violated(false)
-                    .status(ReviewTask.Status.PENDING)
-                    .build();
-
-            reviewRecordService.addReviewRecord(reviewTask);
-            if (reviewTask.getId() != null)
-                rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask.getId());
-
-        } catch (IOException e) {
-            if (file.exists() && !file.delete()) {
-                log.error("文件删除失败路径：{}", fullPath);
-            }
-
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "图片转存失败");
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务提交失败");
         }
+
+        if (reviewTask.getId() != null)
+            rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask.getId());
     }
 
 
@@ -153,8 +115,8 @@ public class ReviewService {
     public void review(Long reviewRecordId) {
         try {
 
-            ReviewTask reviewTask = reviewRecordService.getReviewRecordById(reviewRecordId);
-
+            LocalDateTime reviewTime = LocalDateTime.now();
+            ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewRecordId);
 
             if (reviewTask.getStatus() != ReviewTask.Status.PENDING)
                 return;
@@ -209,21 +171,19 @@ public class ReviewService {
                 }
             });
 
+            reviewTask.setReviewTime(reviewTime);
+            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
 
             if (violationResultList.isEmpty()) {
                 log.info("没有违规被检测到");
-                reviewTask.setReviewTime(LocalDateTime.now());
-                reviewTask.setStatus(ReviewTask.Status.PROCESSED);
-                reviewRecordService.updateReviewRecord(reviewTask);
+                reviewTaskService.updateReviewTask(reviewTask);
                 return;
             }
 
             log.info("检测到违规:{}", violationResultList);
 
-            reviewTask.setReviewTime(LocalDateTime.now());
             reviewTask.setViolated(true);
-            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
-            reviewRecordService.updateReviewRecord(reviewTask);
+            reviewTaskService.updateReviewTask(reviewTask);
 
             submitViolations(violationResultList);
             violationResultService.batchAdd(violationResultList);
@@ -232,6 +192,28 @@ public class ReviewService {
             log.error("复核任务处理失败，reviewRecordId={}", reviewRecordId, e);
             throw new BusinessException(ErrorEnum.BIZ_FAILED, e.getMessage());
         }
+    }
+
+    private Camera validateCameraSecretKey(Long cameraId, String secretKey) {
+
+        String redisKey = RedisConstants.CAMERA_SECRET_KEY + cameraId;
+        String cachedSecretKey = stringRedisTemplate.opsForValue().get(redisKey);
+
+        Camera camera = cameraService.getCameraById(cameraId);
+
+        if (StringUtils.hasText(cachedSecretKey)) {
+            if (!cachedSecretKey.equals(secretKey))
+                throw new AccessDeniedException();
+            stringRedisTemplate.expire(redisKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
+        } else {
+            String dbSecretKey = camera.getSecretKey();
+            if (!secretKey.equals(dbSecretKey)) {
+                throw new AccessDeniedException();
+            }
+            stringRedisTemplate.opsForValue().set(redisKey, secretKey, RedisConstants.CAMERA_SECRET_TTL, TimeUnit.SECONDS);
+        }
+
+        return camera;
     }
 
     private void submitViolations(List<ViolationResult> violationResultList) {
@@ -310,4 +292,6 @@ public class ReviewService {
 
         return normalized.isEmpty() ? null : normalized;
     }
+
+
 }

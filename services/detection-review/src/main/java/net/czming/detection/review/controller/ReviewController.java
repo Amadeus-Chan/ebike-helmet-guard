@@ -1,5 +1,7 @@
 package net.czming.detection.review.controller;
 
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import net.czming.common.annotation.Loggable;
 import net.czming.common.result.R;
 import net.czming.detection.review.service.ReviewService;
@@ -24,10 +26,10 @@ public class ReviewController {
 
     @Loggable(includeParams = false)
     @PostMapping("/review")
-    public R<Void> review(@RequestParam("cameraId") Long cameraId,
-                          @RequestParam("secretKey") String secretKey,
-                          @RequestParam("detectedImage") MultipartFile detectedImage,
-                          @RequestParam("captureTime") LocalDateTime captureTime) {
+    public R<Void> review(@RequestParam("cameraId") @NotNull Long cameraId,
+                          @RequestParam("secretKey") @NotBlank String secretKey,
+                          @RequestParam("detectedImage") @NotNull MultipartFile detectedImage,
+                          @RequestParam("captureTime") @NotNull LocalDateTime captureTime) {
         reviewService.submitReviewTask(cameraId, secretKey, detectedImage, captureTime);
         return R.ok();
     }
