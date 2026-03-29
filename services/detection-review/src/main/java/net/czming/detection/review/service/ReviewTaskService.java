@@ -6,27 +6,33 @@ import net.czming.detection.review.mapper.ReviewTaskMapper;
 import net.czming.model.detection.review.entity.ReviewTask;
 import org.springframework.stereotype.Service;
 
+import java.util.List;
+
 @Service
-public class ReviewRecordService {
+public class ReviewTaskService {
 
     private final ReviewTaskMapper reviewTaskMapper;
 
-    public ReviewRecordService(ReviewTaskMapper reviewTaskMapper) {
+    public ReviewTaskService(ReviewTaskMapper reviewTaskMapper) {
         this.reviewTaskMapper = reviewTaskMapper;
     }
 
-    public void addReviewRecord(ReviewTask reviewTask) {
+    public void addReviewTask(ReviewTask reviewTask) {
         reviewTaskMapper.insertReviewTask(reviewTask);
     }
 
-    public ReviewTask getReviewRecordById(Long id) {
+    public ReviewTask getReviewTaskById(Long id) {
         ReviewTask reviewTask = reviewTaskMapper.selectReviewTaskById(id);
         if (reviewTask == null)
             throw new BusinessException(ErrorEnum.BIZ_FAILED, "目标复核记录不存在");
         return reviewTask;
     }
 
-    public void updateReviewRecord(ReviewTask reviewTask) {
+    public List<ReviewTask> getPendingReviewTask() {
+        return reviewTaskMapper.selectPendingReviewTask();
+    }
+
+    public void updateReviewTask(ReviewTask reviewTask) {
         reviewTaskMapper.updateReviewTask(reviewTask);
     }
 

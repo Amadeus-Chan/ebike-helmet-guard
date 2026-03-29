@@ -66,4 +66,8 @@
     <select id="selectReviewTaskById" resultType="net.czming.model.detection.review.entity.ReviewTask">
         select * from review_task where id = #{id}
     </select>
+
+    <select id="selectPendingReviewTask" resultType="net.czming.model.detection.review.entity.ReviewTask">
+        select * from review_task where status = 'PENDING' order by rand() limit 100
+    </select>
 </mapper>
