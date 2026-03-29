@@ -20,10 +20,12 @@ public class ReviewTask {
     private LocalDateTime reviewTime;
     private boolean violated;
     private Status status;
+    private Integer dispatcherCount;
 
     public enum Status {
         PENDING,
         PROCESSING,
-        PROCESSED
+        PROCESSED,
+        INVALID
     }
 }

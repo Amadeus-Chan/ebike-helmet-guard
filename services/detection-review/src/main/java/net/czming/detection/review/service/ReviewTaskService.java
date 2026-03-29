@@ -40,5 +40,10 @@ public class ReviewTaskService {
         return reviewTaskMapper.markProcessingIfPending(id);
     }
 
+    public void markReviewTaskInvalid(Long id) {
+        reviewTaskMapper.markReviewTaskInvalid(id);
+    }
+
+
 
 }

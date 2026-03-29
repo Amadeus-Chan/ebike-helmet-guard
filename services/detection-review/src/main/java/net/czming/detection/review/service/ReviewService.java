@@ -102,7 +102,6 @@ public class ReviewService {
         } catch (Exception e) {
             if (file.exists() && !file.delete())
                 log.error("文件删除失败，路径：{}", detectedImagePath);
-
             throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务提交失败");
         }
 
@@ -190,7 +189,6 @@ public class ReviewService {
 
             violationResultService.batchAdd(violationResultList);
             submitViolations(violationResultList);
-
 
         } catch (Exception e) {
             log.error("复核任务处理失败，reviewTaskId={}", reviewTaskId, e);

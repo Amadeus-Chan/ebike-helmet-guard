@@ -72,6 +72,16 @@
         </where>
     </update>
 
+    <update id="markReviewTaskInvalid">
+        update review_task
+        <set>
+            status = 'INVALID'
+        </set>
+        <where>
+            id = #{id}
+        </where>
+    </update>
+
 
     <select id="selectReviewTaskById" resultType="net.czming.model.detection.review.entity.ReviewTask">
         select * from review_task where id = #{id}
