@@ -45,5 +45,7 @@ public class ReviewTaskService {
     }
 
 
-
+    public void increaseRetryCount(Long reviewTaskId) {
+        reviewTaskMapper.increaseRetryCount(reviewTaskId);
+    }
 }

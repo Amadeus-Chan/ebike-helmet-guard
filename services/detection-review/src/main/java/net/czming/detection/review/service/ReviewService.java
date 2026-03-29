@@ -32,6 +32,7 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
+import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -94,15 +95,16 @@ public class ReviewService {
                 .captureTime(captureTime)
                 .violated(false)
                 .status(ReviewTask.Status.PENDING)
+                .retryCount(0)
                 .build();
 
         try {
             detectedImageFile.transferTo(file);
             reviewTaskService.addReviewTask(reviewTask);
-        } catch (Exception e) {
+        } catch (IOException e) {
             if (file.exists() && !file.delete())
                 log.error("文件删除失败，路径：{}", detectedImagePath);
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务提交失败");
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "detectedImage转存失败，复核任务提交失败");
         }
 
         if (reviewTask.getId() != null)
@@ -112,88 +114,92 @@ public class ReviewService {
 
     @Loggable
     @Transactional
-    public void review(Long reviewTaskId) {
+    public void review(ReviewTask reviewTask) {
 
-        try {
+        Long reviewTaskId = reviewTask.getId();
 
-            if (reviewTaskService.markProcessingIfPending(reviewTaskId) != 1) {
-                log.info("复核任务已被其他实例抢占或已处理，reviewTaskId={}", reviewTaskId);
-                return;
-            }
-
-            ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewTaskId);
-            Image image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImage());
-
-            List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
-
-            List<DetectionInfo> motorcyclistList = new ArrayList<>();
-            List<DetectionInfo> helmetList = new ArrayList<>();
-            List<DetectionInfo> licensePlateList = new ArrayList<>();
-
-            detectionInfoList.forEach(detectionInfo -> {
-                String type = detectionInfo.getObjectDetInfo().getClassName();
-                switch (type) {
-                    case "motorcyclist" -> motorcyclistList.add(detectionInfo);
-                    case "helmet" -> helmetList.add(detectionInfo);
-                    case "license_plate" -> licensePlateList.add(detectionInfo);
-                }
-            });
-
-
-            List<RiderMatch> riderMatchList =
-                    detectionAssociationService.associate(
-                            motorcyclistList,
-                            helmetList,
-                            licensePlateList,
-                            image.getWidth(),
-                            image.getHeight()
-                    );
-
-
-            List<ViolationResult> violationResultList = new ArrayList<>();
-            riderMatchList.forEach(riderMatch -> {
-                boolean hasHelmet = !riderMatch.getHelmets().isEmpty();
-                boolean hasLicensePlate = riderMatch.getLicensePlate() != null;
-                if (!hasHelmet && hasLicensePlate) {
-                    String recognizeLicensePlate = recognizeLicensePlate(image, riderMatch);
-
-                    if (!StringUtils.hasText(recognizeLicensePlate))
-                        return;
-
-                    ViolationResult violationResult = ViolationResult.builder()
-                            .recordId(reviewTask.getId())
-                            .evidenceImage(reviewTask.getDetectedImage())
-                            .location(reviewTask.getLocation())
-                            .violationTime(reviewTask.getCaptureTime())
-                            .licensePlate(recognizeLicensePlate)
-                            .build();
-
-                    violationResultList.add(violationResult);
-                }
-            });
-
-
-            reviewTask.setReviewTime(LocalDateTime.now());
-            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
-
-            if (violationResultList.isEmpty()) {
-                log.info("没有违规被检测到");
-                reviewTaskService.updateReviewTask(reviewTask);
-                return;
-            }
-
-            log.info("检测到违规:{}", violationResultList);
-
-            reviewTask.setViolated(true);
-            reviewTaskService.updateReviewTask(reviewTask);
-
-            violationResultService.batchAdd(violationResultList);
-            submitViolations(violationResultList);
-
-        } catch (Exception e) {
-            log.error("复核任务处理失败，reviewTaskId={}", reviewTaskId, e);
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务处理失败");
+        if (reviewTaskService.markProcessingIfPending(reviewTaskId) != 1) {
+            log.info("复核任务已被其他实例抢占或已处理，reviewTaskId={}", reviewTaskId);
+            return;
         }
+
+        reviewTask.setStatus(ReviewTask.Status.PROCESSING);
+
+        Image image;
+        try {
+            image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImage());
+        } catch (IOException e) {
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "从Url获取Image失败");
+        }
+
+        List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
+
+        List<DetectionInfo> motorcyclistList = new ArrayList<>();
+        List<DetectionInfo> helmetList = new ArrayList<>();
+        List<DetectionInfo> licensePlateList = new ArrayList<>();
+
+        detectionInfoList.forEach(detectionInfo -> {
+            String type = detectionInfo.getObjectDetInfo().getClassName();
+            switch (type) {
+                case "motorcyclist" -> motorcyclistList.add(detectionInfo);
+                case "helmet" -> helmetList.add(detectionInfo);
+                case "license_plate" -> licensePlateList.add(detectionInfo);
+            }
+        });
+
+
+        List<RiderMatch> riderMatchList =
+                detectionAssociationService.associate(
+                        motorcyclistList,
+                        helmetList,
+                        licensePlateList,
+                        image.getWidth(),
+                        image.getHeight()
+                );
+
+
+        List<ViolationResult> violationResultList = new ArrayList<>();
+
+        for (RiderMatch riderMatch : riderMatchList) {
+
+            boolean hasHelmet = !riderMatch.getHelmets().isEmpty();
+            boolean hasLicensePlate = riderMatch.getLicensePlate() != null;
+
+            if (!hasHelmet && hasLicensePlate) {
+                String recognizeLicensePlate = recognizeLicensePlate(image, riderMatch);
+
+                if (!StringUtils.hasText(recognizeLicensePlate))
+                    return;
+
+                ViolationResult violationResult = ViolationResult.builder()
+                        .recordId(reviewTaskId)
+                        .evidenceImage(reviewTask.getDetectedImage())
+                        .location(reviewTask.getLocation())
+                        .violationTime(reviewTask.getCaptureTime())
+                        .licensePlate(recognizeLicensePlate)
+                        .build();
+
+                violationResultList.add(violationResult);
+            }
+        }
+
+
+        reviewTask.setReviewTime(LocalDateTime.now());
+        reviewTask.setStatus(ReviewTask.Status.PROCESSED);
+
+        if (violationResultList.isEmpty()) {
+            log.info("没有违规被检测到");
+            reviewTaskService.updateReviewTask(reviewTask);
+            return;
+        }
+
+        log.info("检测到违规:{}", violationResultList);
+
+        reviewTask.setViolated(true);
+        reviewTaskService.updateReviewTask(reviewTask);
+
+        violationResultService.batchAdd(violationResultList);
+        submitViolations(violationResultList);
     }
 
     private Camera validateCameraSecretKey(Long cameraId, String secretKey) {

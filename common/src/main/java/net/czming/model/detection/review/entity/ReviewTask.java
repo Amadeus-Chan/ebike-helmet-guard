@@ -20,12 +20,24 @@ public class ReviewTask {
     private LocalDateTime reviewTime;
     private boolean violated;
     private Status status;
-    private Integer dispatcherCount;
+    private int retryCount;
 
     public enum Status {
         PENDING,
         PROCESSING,
         PROCESSED,
         INVALID
+    }
+
+    public ReviewTask(ReviewTask reviewTask) {
+        this.id = reviewTask.getId();
+        this.cameraId = reviewTask.getCameraId();
+        this.detectedImage = reviewTask.getDetectedImage();
+        this.location = reviewTask.getLocation();
+        this.captureTime = reviewTask.getCaptureTime();
+        this.reviewTime = reviewTask.getReviewTime();
+        this.violated = reviewTask.isViolated();
+        this.status = reviewTask.getStatus();
+        this.retryCount = reviewTask.getRetryCount();
     }
 }

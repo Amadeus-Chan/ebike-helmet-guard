@@ -19,4 +19,6 @@ public interface ReviewTaskMapper {
     int markProcessingIfPending(Long id);
 
     int markReviewTaskInvalid(Long id);
+
+    int increaseRetryCount(Long reviewTaskId);
 }

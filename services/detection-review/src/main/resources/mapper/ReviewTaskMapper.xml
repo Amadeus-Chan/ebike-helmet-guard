@@ -82,6 +82,16 @@
         </where>
     </update>
 
+    <update id="increaseRetryCount">
+        update review_task
+        <set>
+            retry_count = retry_count + 1
+        </set>
+        <where>
+            id = #{id}
+        </where>
+    </update>
+
 
     <select id="selectReviewTaskById" resultType="net.czming.model.detection.review.entity.ReviewTask">
         select * from review_task where id = #{id}

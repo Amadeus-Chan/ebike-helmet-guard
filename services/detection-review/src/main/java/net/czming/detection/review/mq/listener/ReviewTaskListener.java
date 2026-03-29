@@ -6,8 +6,7 @@ import net.czming.common.util.constants.RabbitMQConstants;
 import net.czming.detection.review.service.ReviewService;
 import net.czming.detection.review.service.ReviewTaskService;
 import net.czming.model.detection.review.entity.ReviewTask;
-import org.springframework.amqp.rabbit.annotation.*;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Component;
 
 @Slf4j
@@ -16,31 +15,25 @@ import org.springframework.stereotype.Component;
 public class ReviewTaskListener {
 
     private final ReviewService reviewService;
-
     private final ReviewTaskService reviewTaskService;
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = RabbitMQConstants.REVIEW_TASK_QUEUE,
-                    durable = "true",
-                    arguments = {
-                            @Argument(name = "x-dead-letter-exchange", value = RabbitMQConstants.REVIEW_TASK_DLX),
-                            @Argument(name = "x-dead-letter-routing-key", value = RabbitMQConstants.REVIEW_TASK_DLK)
-                    }),
-            exchange = @Exchange(name = RabbitMQConstants.REVIEW_TASK_EXCHANGE),
-            key = RabbitMQConstants.REVIEW_TASK_ROUTING_KEY
-    ))
+    @RabbitListener(queues = RabbitMQConstants.REVIEW_TASK_QUEUE, concurrency = "2")
     public void listen(Long reviewTaskId) {
-        reviewService.review(reviewTaskId);
-    }
 
+        reviewTaskService.increaseRetryCount(reviewTaskId);
+        ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewTaskId);
 
-    @RabbitListener(bindings = @QueueBinding(
-            value = @Queue(value = RabbitMQConstants.REVIEW_TASK_DLQ, durable = "true"),
-            exchange = @Exchange(name = RabbitMQConstants.REVIEW_TASK_DLX),
-            key = RabbitMQConstants.REVIEW_TASK_DLK
-    ))
-    public void deadLetterListen(Long reviewTaskId) {
-        log.error("死信任务: {}", reviewTaskId);
-        reviewTaskService.markReviewTaskInvalid(reviewTaskId);
+        try {
+            reviewService.review(new ReviewTask(reviewTask));
+        } catch (Exception e) {
+
+            int retryCount = reviewTask.getRetryCount() + 1;
+            if (retryCount < RabbitMQConstants.REVIEW_TASK_MAX_RETRY_TIMES) {
+                log.error("复核失败，进入延迟队列。taskId={}, retryCount={}", reviewTaskId, retryCount, e);
+                throw e;
+            }
+
+            reviewTaskService.markReviewTaskInvalid(reviewTaskId);
+        }
     }
 }
