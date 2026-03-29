@@ -14,6 +14,7 @@ import net.czming.common.annotation.Loggable;
 import net.czming.common.exception.AccessDeniedException;
 import net.czming.common.exception.BusinessException;
 import net.czming.common.exception.ErrorEnum;
+import net.czming.common.result.R;
 import net.czming.common.util.constants.RabbitMQConstants;
 import net.czming.common.util.constants.RedisConstants;
 import net.czming.detection.review.feign.ViolationDispositionFeignClient;
@@ -31,7 +32,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.File;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -63,6 +63,7 @@ public class ReviewService {
     private final RabbitTemplate rabbitTemplate;
 
     private final PathProperties pathProperties;
+
 
     public void dispatchPendingTasks() {
         for (ReviewTask reviewTask : reviewTaskService.getPendingReviewTask()) {
@@ -112,15 +113,16 @@ public class ReviewService {
 
     @Loggable
     @Transactional
-    public void review(Long reviewRecordId) {
+    public void review(Long reviewTaskId) {
+
         try {
 
-            LocalDateTime reviewTime = LocalDateTime.now();
-            ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewRecordId);
-
-            if (reviewTask.getStatus() != ReviewTask.Status.PENDING)
+            if (reviewTaskService.markProcessingIfPending(reviewTaskId) != 1) {
+                log.info("复核任务已被其他实例抢占或已处理，reviewTaskId={}", reviewTaskId);
                 return;
+            }
 
+            ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewTaskId);
             Image image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImage());
 
             List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
@@ -171,7 +173,8 @@ public class ReviewService {
                 }
             });
 
-            reviewTask.setReviewTime(reviewTime);
+
+            reviewTask.setReviewTime(LocalDateTime.now());
             reviewTask.setStatus(ReviewTask.Status.PROCESSED);
 
             if (violationResultList.isEmpty()) {
@@ -185,12 +188,13 @@ public class ReviewService {
             reviewTask.setViolated(true);
             reviewTaskService.updateReviewTask(reviewTask);
 
-            submitViolations(violationResultList);
             violationResultService.batchAdd(violationResultList);
+            submitViolations(violationResultList);
 
-        } catch (IOException e) {
-            log.error("复核任务处理失败，reviewRecordId={}", reviewRecordId, e);
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, e.getMessage());
+
+        } catch (Exception e) {
+            log.error("复核任务处理失败，reviewTaskId={}", reviewTaskId, e);
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "复核任务处理失败");
         }
     }
 
@@ -228,7 +232,10 @@ public class ReviewService {
                 }
         ).toList();
 
-        violationDispositionFeignClient.batchAddViolation(violationAddDtoList);
+        R<Void> r = violationDispositionFeignClient.batchAddViolation(violationAddDtoList);
+        if (r == null || r.getCode() != 200) {
+            throw new BusinessException(ErrorEnum.SERVICE_CALL_FAILED, "batchAddViolation失败");
+        }
     }
 
     private String recognizeLicensePlate(Image image, RiderMatch riderMatch) {

@@ -21,8 +21,9 @@ public class ReviewTask {
     private boolean violated;
     private Status status;
 
-     public enum Status {
+    public enum Status {
         PENDING,
+        PROCESSING,
         PROCESSED
     }
 }

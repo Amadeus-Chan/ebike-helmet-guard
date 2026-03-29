@@ -2,9 +2,7 @@ package net.czming.detection.review.mq.listener;
 
 import lombok.extern.slf4j.Slf4j;
 import net.czming.common.util.constants.RabbitMQConstants;
-import net.czming.detection.review.mq.message.ReviewTask;
 import net.czming.detection.review.service.ReviewService;
-import org.springframework.amqp.core.ExchangeTypes;
 import org.springframework.amqp.rabbit.annotation.Exchange;
 import org.springframework.amqp.rabbit.annotation.Queue;
 import org.springframework.amqp.rabbit.annotation.QueueBinding;
@@ -26,7 +24,7 @@ public class ReviewTaskListener {
             exchange = @Exchange(name = RabbitMQConstants.REVIEW_TASK_EXCHANGE),
             key = RabbitMQConstants.REVIEW_TASK_ROUTING_KEY
     ))
-    public void listen(Long id) {
-        reviewService.review(id);
+    public void listen(Long reviewTaskId) {
+        reviewService.review(reviewTaskId);
     }
 }

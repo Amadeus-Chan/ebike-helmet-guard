@@ -62,6 +62,16 @@
         </where>
     </update>
 
+    <update id="markProcessingIfPending">
+        update review_task
+        <set>
+            status = 'PROCESSING'
+        </set>
+        <where>
+            id = #{id} and status = 'PENDING'
+        </where>
+    </update>
+
 
     <select id="selectReviewTaskById" resultType="net.czming.model.detection.review.entity.ReviewTask">
         select * from review_task where id = #{id}

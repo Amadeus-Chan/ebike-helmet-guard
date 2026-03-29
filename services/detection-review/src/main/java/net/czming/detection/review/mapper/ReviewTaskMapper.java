@@ -16,5 +16,5 @@ public interface ReviewTaskMapper {
 
     int updateReviewTask(ReviewTask reviewTask);
 
-
+    int markProcessingIfPending(Long id);
 }

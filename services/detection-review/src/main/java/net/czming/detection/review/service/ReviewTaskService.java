@@ -36,5 +36,9 @@ public class ReviewTaskService {
         reviewTaskMapper.updateReviewTask(reviewTask);
     }
 
+    public int markProcessingIfPending(Long id) {
+        return reviewTaskMapper.markProcessingIfPending(id);
+    }
+
 
 }
