@@ -1,6 +1,7 @@
 package net.czming.violation.disposition.service;
 
 import io.github.linpeilie.Converter;
+import lombok.RequiredArgsConstructor;
 import net.czming.model.violation.disposition.entity.Appeal;
 import net.czming.model.violation.disposition.entity.Violation;
 import net.czming.model.violation.disposition.vo.AppealVo;
@@ -13,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@RequiredArgsConstructor
 @Service
 public class AppealService {
 
@@ -24,22 +26,23 @@ public class AppealService {
 
     private final PermissionService permissionService;
 
+    private final FileStorageService fileStorageService;
+
     private final Converter converter;
 
-    public AppealService(AppealMapper appealMapper, ViolationService violationService, UserService userService, PermissionService permissionService, Converter converter) {
-        this.appealMapper = appealMapper;
-        this.violationService = violationService;
-        this.userService = userService;
-        this.permissionService = permissionService;
-        this.converter = converter;
-    }
 
     public List<AppealVo> getAppeals(String auditorUsername) {
 
         permissionService.requireSelfOrAdmin(auditorUsername);
 
         return appealMapper.selectAppealByAuditorUsername(auditorUsername).stream().map(
-                appeal -> converter.convert(appeal, AppealVo.class)
+                appeal -> {
+                    Violation violation = appeal.getViolation();
+                    String temporaryUrl = fileStorageService.getTemporaryUrl(violation.getEvidenceImage());
+                    violation.setEvidenceImage(temporaryUrl);
+                    appeal.setViolation(violation);
+                    return converter.convert(appeal, AppealVo.class);
+                }
         ).toList();
     }
 
@@ -48,7 +51,13 @@ public class AppealService {
         permissionService.requireSelfOrAdmin(auditorUsername);
 
         return appealMapper.selectProcessingAppealByAuditorUsername(auditorUsername).stream().map(
-                appeal -> converter.convert(appeal, AppealVo.class)
+                appeal -> {
+                    Violation violation = appeal.getViolation();
+                    String temporaryUrl = fileStorageService.getTemporaryUrl(violation.getEvidenceImage());
+                    violation.setEvidenceImage(temporaryUrl);
+                    appeal.setViolation(violation);
+                    return converter.convert(appeal, AppealVo.class);
+                }
         ).toList();
     }
 

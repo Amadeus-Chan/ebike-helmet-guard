@@ -1,16 +1,16 @@
 server:
-  port: 9000
+  port: 7000
 spring:
   application:
     name: detection-review
   datasource:
     url: jdbc:mysql://localhost:3306/detection_review
     username: root
-    password: 123456
+    password: 020508
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 192.168.117.130
+      host: localhost
       port: 6379
       password: 020508
       lettuce:
@@ -62,15 +62,17 @@ spring:
       - nacos:internal-auth.yaml
       - nacos:file-store.yaml
       - nacos:model-path.yaml
+      - nacos:minio.yaml
+
 
 mybatis:
   mapper-locations: classpath:mapper/**.xml
   configuration:
     map-underscore-to-camel-case: true
 
-logging:
-  level:
-    net.czming.detection.review.mapper: debug
+#logging:
+#  level:
+#    net.czming.detection.review.mapper: debug
 
 
 

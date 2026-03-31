@@ -1,6 +1,7 @@
 package net.czming.violation.disposition.service;
 
 import io.github.linpeilie.Converter;
+import lombok.RequiredArgsConstructor;
 import net.czming.model.violation.disposition.dto.ViolationAddDto;
 import net.czming.model.violation.disposition.entity.User;
 import net.czming.model.violation.disposition.entity.Violation;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+@RequiredArgsConstructor
 @Service
 public class ViolationService {
 
@@ -25,12 +27,9 @@ public class ViolationService {
 
     private final Converter converter;
 
-    public ViolationService(ViolationMapper violationMapper,PermissionService permissionService, EbikeService ebikeService, Converter converter) {
-        this.violationMapper = violationMapper;
-        this.ebikeService = ebikeService;
-        this.permissionService = permissionService;
-        this.converter = converter;
-    }
+    private final FileStorageService fileStorageService;
+
+
 
     public List<ViolationVo> getViolations(String licensePlate) {
 
@@ -38,6 +37,11 @@ public class ViolationService {
         permissionService.requireSelfOrAdmin(ebikeOwnerUsername);
 
         List<Violation> violationList = violationMapper.selectViolationsByLicensePlate(licensePlate);
+
+        violationList.forEach(violation -> {
+            String temporaryUrl = fileStorageService.getTemporaryUrl(violation.getEvidenceImage());
+            violation.setEvidenceImage(temporaryUrl);
+        });
 
         return violationList.stream().map(
                 violation -> converter.convert(violation, ViolationVo.class)

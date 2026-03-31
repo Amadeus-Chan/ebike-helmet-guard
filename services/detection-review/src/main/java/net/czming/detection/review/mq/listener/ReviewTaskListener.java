@@ -20,13 +20,14 @@ public class ReviewTaskListener {
     @RabbitListener(queues = RabbitMQConstants.REVIEW_TASK_QUEUE, concurrency = "2")
     public void listen(Long reviewTaskId) {
 
-        reviewTaskService.increaseRetryCount(reviewTaskId);
+
         ReviewTask reviewTask = reviewTaskService.getReviewTaskById(reviewTaskId);
 
         try {
             reviewService.review(new ReviewTask(reviewTask));
         } catch (Exception e) {
 
+            reviewTaskService.increaseRetryCount(reviewTaskId);
             int retryCount = reviewTask.getRetryCount() + 1;
             if (retryCount < RabbitMQConstants.REVIEW_TASK_MAX_RETRY_TIMES) {
                 log.error("复核失败，进入延迟队列。taskId={}, retryCount={}", reviewTaskId, retryCount, e);

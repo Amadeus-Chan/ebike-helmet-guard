@@ -4,10 +4,12 @@ import ai.djl.modality.cv.Image;
 import cn.smartjavaai.common.cv.SmartImageFactory;
 import cn.smartjavaai.common.entity.DetectionInfo;
 import cn.smartjavaai.common.entity.DetectionRectangle;
+import cn.smartjavaai.common.entity.DetectionResponse;
 import cn.smartjavaai.objectdetection.model.DetectorModel;
 import cn.smartjavaai.ocr.config.OcrRecOptions;
 import cn.smartjavaai.ocr.entity.OcrInfo;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
+import io.minio.GetObjectResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.czming.common.annotation.Loggable;
@@ -34,6 +36,7 @@ import org.springframework.web.multipart.MultipartFile;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -57,13 +60,15 @@ public class ReviewService {
 
     private final DetectionAssociationService detectionAssociationService;
 
+    private final FileStorageService fileStorageService;
+
     private final ViolationDispositionFeignClient violationDispositionFeignClient;
 
     private final StringRedisTemplate stringRedisTemplate;
 
     private final RabbitTemplate rabbitTemplate;
 
-    private final PathProperties pathProperties;
+
 
 
     public void dispatchPendingTasks() {
@@ -77,20 +82,10 @@ public class ReviewService {
 
         Camera camera = validateCameraSecretKey(cameraId, secretKey);
 
-        File dir = new File(pathProperties.getDetectedImageDir());
-        if (!dir.exists() && !dir.mkdirs()) {
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "detectedImage目录创建失败");
-        }
-
-        String imageFileName = UUID.randomUUID() + ".jpg";
-        String detectedImagePath = pathProperties.getDetectedImageDir() + File.separator + imageFileName;
-        String detectedImageUrl = pathProperties.getDetectedImageUrlPrefix() + "/" + imageFileName;
-
-        File file = new File(detectedImagePath);
-
+        String detectedImageKey = fileStorageService.uploadDetectedImage(detectedImageFile, captureTime);
         ReviewTask reviewTask = ReviewTask.builder()
                 .cameraId(cameraId)
-                .detectedImage(detectedImageUrl)
+                .detectedImage(detectedImageKey)
                 .location(camera.getLocation())
                 .captureTime(captureTime)
                 .violated(false)
@@ -98,14 +93,7 @@ public class ReviewService {
                 .retryCount(0)
                 .build();
 
-        try {
-            detectedImageFile.transferTo(file);
-            reviewTaskService.addReviewTask(reviewTask);
-        } catch (IOException e) {
-            if (file.exists() && !file.delete())
-                log.error("文件删除失败，路径：{}", detectedImagePath);
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "detectedImage转存失败，复核任务提交失败");
-        }
+        reviewTaskService.addReviewTask(reviewTask);
 
         if (reviewTask.getId() != null)
             rabbitTemplate.convertAndSend(RabbitMQConstants.REVIEW_TASK_EXCHANGE, RabbitMQConstants.REVIEW_TASK_ROUTING_KEY, reviewTask.getId());
@@ -123,20 +111,38 @@ public class ReviewService {
             return;
         }
 
-        reviewTask.setStatus(ReviewTask.Status.PROCESSING);
-
         Image image;
-        try {
-            image = SmartImageFactory.getInstance().fromUrl(reviewTask.getDetectedImage());
-        } catch (IOException e) {
-            throw new BusinessException(ErrorEnum.BIZ_FAILED, "从Url获取Image失败");
+        try (GetObjectResponse getObjectResponse = fileStorageService.getObject(reviewTask.getDetectedImage())) {
+            image = SmartImageFactory.getInstance().fromInputStream(getObjectResponse);
+        } catch (Exception e) {
+            throw new BusinessException(ErrorEnum.BIZ_FAILED, "从GetObjectResponse获取Image失败");
         }
 
-        List<DetectionInfo> detectionInfoList = detectorModel.detect(image).getDetectionInfoList();
+        DetectionResponse detectionResponse = detectorModel.detect(image);
+
+        if (detectionResponse == null) {
+            reviewTask.setReviewTime(LocalDateTime.now());
+            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
+            reviewTaskService.updateReviewTask(reviewTask);
+            log.info("没有违规被检测到，detectionResponse为null，reviewTaskId={}", reviewTask);
+            return;
+        }
+
+
+        List<DetectionInfo> detectionInfoList = detectionResponse.getDetectionInfoList();
+
+        if (detectionInfoList == null || detectionInfoList.isEmpty()) {
+            reviewTask.setReviewTime(LocalDateTime.now());
+            reviewTask.setStatus(ReviewTask.Status.PROCESSED);
+            reviewTaskService.updateReviewTask(reviewTask);
+            log.info("没有违规被检测到，detectionInfoList为空，reviewTaskId={}", reviewTask);
+            return;
+        }
 
         List<DetectionInfo> motorcyclistList = new ArrayList<>();
         List<DetectionInfo> helmetList = new ArrayList<>();
         List<DetectionInfo> licensePlateList = new ArrayList<>();
+
 
         detectionInfoList.forEach(detectionInfo -> {
             String type = detectionInfo.getObjectDetInfo().getClassName();
@@ -146,7 +152,6 @@ public class ReviewService {
                 case "license_plate" -> licensePlateList.add(detectionInfo);
             }
         });
-
 
         List<RiderMatch> riderMatchList =
                 detectionAssociationService.associate(
@@ -169,7 +174,7 @@ public class ReviewService {
                 String recognizeLicensePlate = recognizeLicensePlate(image, riderMatch);
 
                 if (!StringUtils.hasText(recognizeLicensePlate))
-                    return;
+                    continue;
 
                 ViolationResult violationResult = ViolationResult.builder()
                         .recordId(reviewTaskId)
@@ -183,17 +188,16 @@ public class ReviewService {
             }
         }
 
-
         reviewTask.setReviewTime(LocalDateTime.now());
         reviewTask.setStatus(ReviewTask.Status.PROCESSED);
 
         if (violationResultList.isEmpty()) {
-            log.info("没有违规被检测到");
+            log.info("没有违规被检测到，reviewTaskId={}", reviewTask);
             reviewTaskService.updateReviewTask(reviewTask);
             return;
         }
 
-        log.info("检测到违规:{}", violationResultList);
+        log.info("检测到违规，reviewTaskId={}", reviewTask);
 
         reviewTask.setViolated(true);
         reviewTaskService.updateReviewTask(reviewTask);
@@ -238,7 +242,7 @@ public class ReviewService {
 
         R<Void> r = violationDispositionFeignClient.batchAddViolation(violationAddDtoList);
         if (r == null || r.getCode() != 200) {
-            throw new BusinessException(ErrorEnum.SERVICE_CALL_FAILED, "batchAddViolation失败");
+            throw new BusinessException(ErrorEnum.INTERNAL_CALL_FAILED, "batchAddViolation失败");
         }
     }
 

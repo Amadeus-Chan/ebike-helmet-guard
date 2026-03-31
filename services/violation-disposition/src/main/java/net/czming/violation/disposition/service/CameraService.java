@@ -39,7 +39,7 @@ public class CameraService {
 
         R<Void> r = detectionReviewClient.addCamera(cameraAddDto);
         if (r.getCode() == 500)
-            throw new BusinessException(ErrorEnum.SERVICE_CALL_FAILED, "微服务调用失败：" + r.getData());
+            throw new BusinessException(ErrorEnum.INTERNAL_CALL_FAILED, "微服务调用失败：" + r.getData());
     }
 
     public void deleteCamera(Long cameraId) {
@@ -47,6 +47,6 @@ public class CameraService {
 
         R<Void> r = detectionReviewClient.deleteCamera(cameraId);
         if (r.getCode() == 500)
-            throw new BusinessException(ErrorEnum.SERVICE_CALL_FAILED, "微服务调用失败:" + r.getMessage());
+            throw new BusinessException(ErrorEnum.INTERNAL_CALL_FAILED, "微服务调用失败:" + r.getMessage());
     }
 }

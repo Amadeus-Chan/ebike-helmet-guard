@@ -25,7 +25,7 @@ public class SendVerifyCodeUtil {
         try {
             client = new com.aliyun.dypnsapi20170525.Client(config);
         } catch (Exception e) {
-            throw new BusinessException(ErrorEnum.EXTERNAL_API_FAILED);
+            throw new BusinessException(ErrorEnum.EXTERNAL_CALL_FAILED);
         }
     }
 
@@ -43,7 +43,7 @@ public class SendVerifyCodeUtil {
         try {
             client.sendSmsVerifyCodeWithOptions(sendSmsVerifyCodeRequest, runtime);
         } catch (Exception e) {
-            throw new BusinessException(ErrorEnum.EXTERNAL_API_FAILED);
+            throw new BusinessException(ErrorEnum.EXTERNAL_CALL_FAILED);
         }
 
     }

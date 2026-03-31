@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
 public class ReviewTaskDispatchJob {
     private final ReviewService reviewService;
 
-    @Scheduled(fixedDelay =  12 * 60 * 60 * 60 * 1000L)
+    @Scheduled(fixedDelay = 5 * 60 * 1000L)
     public void dispatchPendingTasks() {
         reviewService.dispatchPendingTasks();
     }

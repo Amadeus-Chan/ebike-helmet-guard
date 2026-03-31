@@ -20,4 +20,10 @@ public class BusinessException extends RuntimeException {
         this.errorCode = errorEnum.getErrorCode();
         this.detailMessage = detailMessage;
     }
+
+    public BusinessException(ErrorEnum errorEnum, String detailMessage, Throwable cause) {
+        super(errorEnum.getMessage(), cause);
+        this.errorCode = errorEnum.getErrorCode();
+        this.detailMessage = detailMessage;
+    }
 }
