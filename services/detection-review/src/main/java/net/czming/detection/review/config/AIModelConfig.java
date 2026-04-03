@@ -15,26 +15,31 @@ import cn.smartjavaai.ocr.factory.OcrModelFactory;
 import cn.smartjavaai.ocr.model.common.detect.OcrCommonDetModel;
 import cn.smartjavaai.ocr.model.common.direction.OcrDirectionModel;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
+import lombok.RequiredArgsConstructor;
+import net.czming.detection.review.properties.DetectionModeProperties;
 import net.czming.detection.review.properties.ModelPathProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+@RequiredArgsConstructor
 @Configuration
 public class AIModelConfig {
 
+
     private final ModelPathProperties modelPathProperties;
 
-    public AIModelConfig(ModelPathProperties modelPathProperties) {
-        this.modelPathProperties = modelPathProperties;
-    }
 
     @Bean(destroyMethod = "")
-    public DetectorModel getDetectorModel(){
+    public DetectorModel getDetectorModel() {
         DetectorModelConfig config = new DetectorModelConfig();
         config.setModelEnum(DetectorModelEnum.YOLOV8_CUSTOM_ONNX);
         config.setModelPath(modelPathProperties.getDetectModel());
+
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
+
+
         return ObjectDetectionModelFactory.getInstance().getModel(config);
     }
 
@@ -43,9 +48,12 @@ public class AIModelConfig {
         OcrRecModelConfig config = new OcrRecModelConfig();
         config.setRecModelEnum(CommonRecModelEnum.PP_OCR_V5_SERVER_REC_MODEL);
         config.setRecModelPath(modelPathProperties.getOcrRecognizeModel());
-        config.setDevice(DeviceEnum.CPU);
+
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
+
+
         config.setTextDetModel(getDetectionModel());
         config.setDirectionModel(getDirectionModel());
         return OcrModelFactory.getInstance().getRecModel(config);
@@ -56,9 +64,12 @@ public class AIModelConfig {
         OcrDetModelConfig config = new OcrDetModelConfig();
         config.setModelEnum(CommonDetModelEnum.PP_OCR_V5_SERVER_DET_MODEL);
         config.setDetModelPath(modelPathProperties.getOcrDetectionModel());
-        config.setDevice(DeviceEnum.CPU);
+
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
+
+
         return OcrModelFactory.getInstance().getDetModel(config);
     }
 
@@ -66,9 +77,12 @@ public class AIModelConfig {
         DirectionModelConfig config = new DirectionModelConfig();
         config.setModelEnum(DirectionModelEnum.PP_LCNET_X1_0);
         config.setModelPath(modelPathProperties.getOcrTextlineModel());
-        config.setDevice(DeviceEnum.CPU);
+
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
+
+
         return OcrModelFactory.getInstance().getDirectionModel(config);
     }
 

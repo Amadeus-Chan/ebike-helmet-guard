@@ -20,7 +20,6 @@ import net.czming.common.result.R;
 import net.czming.common.util.constants.RabbitMQConstants;
 import net.czming.common.util.constants.RedisConstants;
 import net.czming.detection.review.feign.ViolationDispositionFeignClient;
-import net.czming.detection.review.properties.PathProperties;
 import net.czming.detection.review.service.DetectionAssociationService.RiderMatch;
 import net.czming.model.detection.review.entity.Camera;
 import net.czming.model.detection.review.entity.ReviewTask;
@@ -33,13 +32,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 

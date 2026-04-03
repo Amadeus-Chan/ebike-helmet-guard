@@ -3,11 +3,21 @@ server:
   port: 80
 
 spring:
+  profiles:
+    active: dev
+
   application:
     name: gateway
+
   cloud:
     nacos:
       server-addr: 127.0.0.1:8848
+      discovery:
+        namespace: ${spring.profiles.active}
+      config:
+        namespace: ${spring.profiles.active}
+        group: ${spring.application.name}
+
     gateway:
       globalcors:
         add-to-simple-url-handler-mapping: true
@@ -18,4 +28,4 @@ spring:
             allowed-methods: '*'
   config:
     import:
-      - classpath:application-routes.yaml
+      - nacos:route.yaml

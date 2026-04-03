@@ -2,43 +2,22 @@ server:
   port: 8000
 
 spring:
+  profiles:
+    active: dev
   application:
     name: violation-disposition
-  datasource:
-    url: jdbc:mysql://localhost:3306/violation_disposition
-    username: root
-    password: 020508
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: 020508
-      lettuce:
-        pool:
-          max-active: 8
-          min-idle: 0
-          max-idle: 8
-          max-wait: 100
   cloud:
     nacos:
+      server-addr: 127.0.0.1:8848
+      discovery:
+        namespace: ${spring.profiles.active}
       config:
-        server-addr: 127.0.0.1:8848
-        namespace: public
+        namespace: ${spring.profiles.active}
         group: ${spring.application.name}
-  rabbitmq:
-    host: localhost
-    port: 5672
-    virtual-host: /ebike-helmet-guard
-    username: czming
-    password: 020508
-  servlet:
-    multipart:
-      enabled: true
-      max-file-size: 10MB
-      max-request-size: 100MB
+
   config:
     import:
+      - nacos:infra.yaml
       - nacos:internal-auth.yaml
       - nacos:app-code.yaml
       - nacos:access-key.yaml

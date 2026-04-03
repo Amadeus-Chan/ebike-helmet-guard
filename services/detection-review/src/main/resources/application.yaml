@@ -1,64 +1,32 @@
 server:
   port: 7000
+
 spring:
+
+  profiles:
+    active: dev
+
   application:
     name: detection-review
-  datasource:
-    url: jdbc:mysql://localhost:3306/detection_review
-    username: root
-    password: 020508
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: 020508
-      lettuce:
-        pool:
-          max-active: 8
-          min-idle: 0
-          max-idle: 8
-          max-wait: 100
-  rabbitmq:
-    host: localhost
-    port: 5672
-    virtual-host: /ebike-helmet-guard
-    username: czming
-    password: 020508
-    connection-timeout: 200ms
-    listener:
-      simple:
-        defaultRequeueRejected: false
-        prefetch: 1
-        retry:
-          enabled: true
-          initial-interval: 1000ms
-          max-attempts: 3
-          multiplier: 1
-          stateless: true
-    template:
-      retry:
-        enabled: true
-        initial-interval: 1000ms
-        multiplier: 1
-        max-attempts: 3
 
   cloud:
     nacos:
+      server-addr: 127.0.0.1:8848
+      discovery:
+        namespace: ${spring.profiles.active}
       config:
-        server-addr: 127.0.0.1:8848
-        namespace: public
+        namespace: ${spring.profiles.active}
         group: ${spring.application.name}
 
-  mvc:
-    static-path-pattern: /images/**
   servlet:
     multipart:
       enabled: true
       max-request-size: 50MB
       max-file-size: 10MB
+
   config:
     import:
+      - nacos:infra.yaml
       - nacos:internal-auth.yaml
       - nacos:file-store.yaml
       - nacos:model-path.yaml
@@ -69,6 +37,8 @@ mybatis:
   mapper-locations: classpath:mapper/**.xml
   configuration:
     map-underscore-to-camel-case: true
+
+
 
 #logging:
 #  level:

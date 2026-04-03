@@ -9,11 +9,9 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @Data
 @Component
-@ConfigurationProperties(prefix = "file-store")
-public class PathProperties {
-    @NotBlank
-    private String detectedImageDir;
+@ConfigurationProperties(prefix = "model")
+public class DetectionModeProperties {
 
     @NotBlank
-    private String detectedImageUrlPrefix;
+    private String detectionMode;
 }
