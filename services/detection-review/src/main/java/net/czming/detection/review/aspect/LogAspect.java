@@ -8,6 +8,7 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StopWatch;
 
@@ -28,6 +29,7 @@ public class LogAspect {
     @Around("@annotation(net.czming.common.annotation.Loggable) || @within(net.czming.common.annotation.Loggable)")
     public Object logExecutionTime(ProceedingJoinPoint proceedingJoinPoint) throws Throwable {
 
+        AopUtils.getTargetClass(proceedingJoinPoint.getTarget());
         String className = proceedingJoinPoint.getTarget().getClass().getName();
         MethodSignature signature = (MethodSignature) proceedingJoinPoint.getSignature();
         Method method = signature.getMethod();

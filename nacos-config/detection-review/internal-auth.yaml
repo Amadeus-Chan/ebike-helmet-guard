@@ -1,0 +1,5 @@
+internal-auth:
+  service-name: detection-review
+  secret-key: detection-review-secret-key
+  trusted-service-secrets:
+    violation-disposition: violation-disposition-secret-key

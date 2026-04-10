@@ -2,10 +2,16 @@
   <dictionary name="project">
     <words>
       <w>aliyun</w>
+      <w>appendonly</w>
+      <w>curlimages</w>
       <w>czming</w>
       <w>globalcors</w>
+      <w>initdb</w>
       <w>likeai</w>
+      <w>nacos</w>
+      <w>requirepass</w>
       <w>textline</w>
+      <w>uroot</w>
     </words>
   </dictionary>
 </component>

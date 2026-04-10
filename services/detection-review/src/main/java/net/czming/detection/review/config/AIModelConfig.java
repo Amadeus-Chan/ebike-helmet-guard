@@ -16,7 +16,6 @@ import cn.smartjavaai.ocr.model.common.detect.OcrCommonDetModel;
 import cn.smartjavaai.ocr.model.common.direction.OcrDirectionModel;
 import cn.smartjavaai.ocr.model.common.recognize.OcrCommonRecModel;
 import lombok.RequiredArgsConstructor;
-import net.czming.detection.review.properties.DetectionModeProperties;
 import net.czming.detection.review.properties.ModelPathProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -50,6 +49,7 @@ public class AIModelConfig {
         config.setRecModelPath(modelPathProperties.getOcrRecognizeModel());
 
 
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
 
@@ -66,6 +66,7 @@ public class AIModelConfig {
         config.setDetModelPath(modelPathProperties.getOcrDetectionModel());
 
 
+
         config.setDevice(DeviceEnum.GPU);
         config.setGpuId(0);
 
@@ -77,6 +78,7 @@ public class AIModelConfig {
         DirectionModelConfig config = new DirectionModelConfig();
         config.setModelEnum(DirectionModelEnum.PP_LCNET_X1_0);
         config.setModelPath(modelPathProperties.getOcrTextlineModel());
+
 
 
         config.setDevice(DeviceEnum.GPU);

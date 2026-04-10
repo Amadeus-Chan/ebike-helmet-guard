@@ -1,0 +1,5 @@
+model-path:
+    detect-model: /app/model/detect_model/best.onnx
+    ocr-detection-model: /app/model/ocr_detection_model/PP-OCRv5_server_det.onnx
+    ocr-recognize-model: /app/model/ocr_recognize_model/PP-OCRv5_server_rec.onnx
+    ocr-textline-model: /app/model/ocr_textline_model/PP-LCNet_x1_0_textline_ori_infer.onnx

@@ -16,6 +16,18 @@
         <maven.compiler.target>17</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
+        <javacv.version>1.5.10</javacv.version>
+
+        <javacv.platform.macosx-arm64>macosx-arm64</javacv.platform.macosx-arm64>
+        <javacv.platform.linux-x86_64>linux-x86_64</javacv.platform.linux-x86_64>
+        <javacv.platform.linux-arm64>linux-arm64</javacv.platform.linux-arm64>
+        <javacv.platform.windows-x86_64>windows-x86_64</javacv.platform.windows-x86_64>
+
+        <djl.platform.windows-x86_64>win-x86_64</djl.platform.windows-x86_64>
+        <djl.platform.linux-x86_64>linux-x86_64</djl.platform.linux-x86_64>
+        <djl.platform.linux-aarch64>linux-aarch64</djl.platform.linux-aarch64>
+        <djl.platform.osx-aarch64>osx-aarch64</djl.platform.osx-aarch64>
+
     </properties>
 
     <dependencies>
@@ -57,7 +69,6 @@
             <scope>runtime</scope>
         </dependency>
 
-
     </dependencies>
 
 
@@ -68,6 +79,17 @@
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
         </plugins>
+
+        <resources>
+            <resource>
+                <directory>
+                    src/main/resources
+                </directory>
+                <excludes>
+                    <exclude>model/**</exclude>
+                </excludes>
+            </resource>
+        </resources>
     </build>
 
 </project>

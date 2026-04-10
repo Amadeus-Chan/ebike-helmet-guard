@@ -1,0 +1,157 @@
+name: ebike-helmet-guard
+
+volumes:
+  mysql-data:
+  redis-data:
+  minio-data:
+  rabbitmq-data:
+
+services:
+  violation-disposition:
+    build: ./services/violation-disposition
+    image: violation-disposition:latest
+    ports:
+      - "8000:8000"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      nacos-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+
+  detection-review:
+    build: ./services/detection-review
+    image: detection-review:latest
+    ports:
+      - "7000:7000"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    gpus: all
+    depends_on:
+      nacos-init:
+        condition: service_completed_successfully
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  gateway:
+    build: ./gateway
+    image: gateway:latest
+    ports:
+      - "80:80"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+    depends_on:
+      nacos-init:
+        condition: service_completed_successfully
+
+  nacos:
+    image: nacos/nacos-server:v2.4.3
+    ports:
+      - "8848:8848"
+      - "9848:9848"
+    environment:
+      MODE: standalone
+      SPRING_DATASOURCE_PLATFORM: mysql
+      MYSQL_SERVICE_HOST: mysql
+      MYSQL_SERVICE_PORT: 3306
+      MYSQL_SERVICE_DB_NAME: nacos
+      MYSQL_SERVICE_USER: nacos
+      MYSQL_SERVICE_PASSWORD: "020508"
+      MYSQL_SERVICE_DB_PARAM: "characterEncoding=utf8&connectTimeout=1000&socketTimeout=3000&autoReconnect=true&useUnicode=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "echo > /dev/tcp/127.0.0.1/8848" ]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  nacos-init:
+    image: curlimages/curl:8.19.0
+    volumes:
+      - ./nacos-config:/nacos-config:ro
+    entrypoint: [ "sh" ]
+    command: [ "/nacos-config/import-nacos.sh" ]
+    depends_on:
+      nacos:
+        condition: service_healthy
+    restart: "no"
+
+  mysql:
+    image: mysql:8.4.8
+    ports:
+      - "3306:3306"
+      - "33060:33060"
+    environment:
+      MYSQL_ROOT_PASSWORD: "020508"
+      MYSQL_DATABASE: nacos
+      MYSQL_USER: nacos
+      MYSQL_PASSWORD: "020508"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p020508" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:8.6.2
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: [ "redis-server", "--appendonly", "yes", "--requirepass", "020508" ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "020508", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: czming
+      MINIO_ROOT_PASSWORD: "020508.c"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live" ]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:4.2.5-management
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: czming
+      RABBITMQ_DEFAULT_PASS: "020508"
+      RABBITMQ_DEFAULT_VHOST: /ebike-helmet-guard
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
